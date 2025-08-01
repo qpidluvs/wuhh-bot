@@ -126,14 +126,19 @@ async def pay(interaction: discord.Interaction):
     )
     await interaction.response.send_message(embed=embed, ephemeral=False)
 
-@app_commands.describe(user="User to show card for (only special role can use this)")
+@app_commands.describe(user="User to show card for (only owner can use this)")
 @bot.tree.command(name="card", description="Show your loyalty card")
 async def card(interaction: discord.Interaction, user: discord.User = None):
-    # If user is None, show for the interaction user
     user = user or interaction.user
 
+    if user != interaction.user:
+        member = interaction.guild.get_member(interaction.user.id)
+        if member is None or SPECIAL_ROLE_ID not in [role.id for role in member.roles]:
+            await interaction.response.send_message("You don't have permission to check others' cards.", ephemeral=True)
+            return
+
     punches = bot.get_punches(user.id)
-    punches = max(1, min(punches, 8))  # from 1 to 8 punches
+    punches = max(1, min(punches, 8))  # Clamp punches between 1 and 8
 
     image_path = os.path.join(CARD_FOLDER, f"card_{punches}.webp")
     filename = f"card_{punches}.webp"
@@ -149,6 +154,7 @@ async def card(interaction: discord.Interaction, user: discord.User = None):
         color=EMBED_COLOR
     )
     embed.set_image(url=f"attachment://{filename}")
+
     await interaction.response.send_message(embed=embed, file=file, ephemeral=False)
 
     punches = bot.get_punches(user.id)
