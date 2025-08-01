@@ -171,6 +171,21 @@ async def punch(interaction: discord.Interaction, member: discord.Member):
     punches = bot.add_punch(member.id)
     await interaction.response.send_message(f"<:ppawl:1372679923738607727> Gave a punch to {member.mention}. They now have {punches}/8 punches! <a:0kawaiiSparkles:1371321399955689523>")
 
+@bot.tree.command(name="reset", description="Reset a user's loyalty card punches")
+@app_commands.describe(member="User whose punches to reset")
+async def reset(interaction: discord.Interaction, member: discord.Member):
+    # Check if the user has the special role
+    guild_member = interaction.guild.get_member(interaction.user.id)
+    if guild_member is None or SPECIAL_ROLE_ID not in [role.id for role in guild_member.roles]:
+        await interaction.response.send_message("You don't have permission to use this command.", ephemeral=True)
+        return
+
+    # Reset punches to zero
+    bot.c.execute("INSERT OR REPLACE INTO punches (user_id, count) VALUES (?, ?)", (str(member.id), 0))
+    bot.conn.commit()
+
+    await interaction.response.send_message(f"Reset punches for {member.mention}.", ephemeral=True)
+
 async def handle(request):
     return web.Response(text="Bot is running")
 
