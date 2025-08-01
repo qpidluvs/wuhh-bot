@@ -6,6 +6,7 @@ import asyncio
 import sqlite3
 import os
 
+QUEUE_CHANNEL_ID = 1400893779648577536
 STICKY_CHANNEL_ID = 1349182117040488502
 SPECIAL_ROLE_ID = 1334217816039231593  # Role that can check other users' cards
 EMBED_COLOR = discord.Color(int("FFFFFF", 16))
@@ -235,6 +236,11 @@ async def queue(interaction: discord.Interaction, product_bought: str, payment: 
         await interaction.response.send_message("You don’t have permission to use this command.", ephemeral=True)
         return
 
+    queue_channel = bot.get_channel(QUEUE_CHANNEL_ID)
+    if queue_channel is None:
+        await interaction.response.send_message("Queue channel not found.", ephemeral=True)
+        return
+
     embed = discord.Embed(
         title="queue status",
         description=(
@@ -246,10 +252,10 @@ async def queue(interaction: discord.Interaction, product_bought: str, payment: 
         ),
         color=EMBED_COLOR
     )
-    msg = await interaction.channel.send(embed=embed)
+    msg = await queue_channel.send(embed=embed)
     view = QueueStatusView(embed, msg)
     await msg.edit(view=view)
-    await interaction.response.send_message("Queue added.", ephemeral=True)
+    await interaction.response.send_message(f"Queue added in {queue_channel.mention}.", ephemeral=True)
 
 async def handle(request):
     return web.Response(text="Bot is running")
