@@ -144,12 +144,12 @@ async def card(interaction: discord.Interaction, user: discord.User = None):
 
     file = discord.File(image_path, filename=filename)
     embed = discord.Embed(
-        title=f"{user.name}'s Loyalty Card",
+        title=f"{user.name}'s Loyalty Card <:00000004whitepaw_cxa:1372680035710009454>",
         description=f"Punches: {punches}/8",
         color=EMBED_COLOR
     )
     embed.set_image(url=f"attachment://{filename}")
-    await interaction.response.send_message(embed=embed, file=file, ephemeral=True)
+    await interaction.response.send_message(embed=embed, file=file, ephemeral=False)
 
     punches = bot.get_punches(user.id)
     punches = max(1, min(punches, 8))  # 1 to 8 punches
@@ -172,12 +172,12 @@ async def card(interaction: discord.Interaction, user: discord.User = None):
 
     file = discord.File(image_path, filename=filename)
     embed = discord.Embed(
-        title=f"{user.name}'s Loyalty Card",
+        title=f"{user.name}'s Loyalty Card <:00000004whitepaw_cxa:1372680035710009454>",
         description=f"Punches: {punches}/8",
         color=EMBED_COLOR
     )
     embed.set_image(url=f"attachment://{filename}")
-    await interaction.response.send_message(embed=embed, file=file, ephemeral=True)
+    await interaction.response.send_message(embed=embed, file=file, ephemeral=False)
 
 @bot.tree.command(name="punch", description="Add a punch to a user")
 @app_commands.describe(member="User to punch")
