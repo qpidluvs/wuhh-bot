@@ -138,7 +138,11 @@ async def card(interaction: discord.Interaction, user: discord.User = None):
             return
 
     punches = bot.get_punches(user.id)
-    punches = max(1, min(punches, 8))  # Clamp punches between 1 and 8
+    punches = max(0, min(punches, 8))  # Clamp punches between 0 and 8
+
+    if punches == 0:
+        await interaction.response.send_message(f"{user.name} has no punches yet.", ephemeral=True)
+        return
 
     image_path = os.path.join(CARD_FOLDER, f"card_{punches}.webp")
     filename = f"card_{punches}.webp"
@@ -155,34 +159,6 @@ async def card(interaction: discord.Interaction, user: discord.User = None):
     )
     embed.set_image(url=f"attachment://{filename}")
 
-    await interaction.response.send_message(embed=embed, file=file, ephemeral=False)
-
-    punches = bot.get_punches(user.id)
-    punches = max(1, min(punches, 8))  # 1 to 8 punches
-
-    image_index = punches - 1
-
-    if image_index == 0:  # punch 1
-        image_path = os.path.join(CARD_FOLDER, "card_0.png")
-        filename = "card_0.png"
-    elif image_index == 5:  # punch 6
-        image_path = os.path.join(CARD_FOLDER, "card_5.png")
-        filename = "card_5.png"
-    else:
-        image_path = os.path.join(CARD_FOLDER, f"card_{image_index}.webp")
-        filename = f"card_{image_index}.webp"
-
-    if not os.path.exists(image_path):
-        await interaction.response.send_message("Card image not found.", ephemeral=True)
-        return
-
-    file = discord.File(image_path, filename=filename)
-    embed = discord.Embed(
-        title=f"{user.name}'s Loyalty Card <:00000004whitepaw_cxa:1372680035710009454>",
-        description=f"Punches: {punches}/8",
-        color=EMBED_COLOR
-    )
-    embed.set_image(url=f"attachment://{filename}")
     await interaction.response.send_message(embed=embed, file=file, ephemeral=False)
 
 @bot.tree.command(name="punch", description="Add a punch to a user")
