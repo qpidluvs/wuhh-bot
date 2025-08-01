@@ -7,9 +7,9 @@ import sqlite3
 import os
 
 STICKY_CHANNEL_ID = 1349182117040488502
-USER_ID_SILLYWUH = 1334217816039231593
+SPECIAL_ROLE_ID = 1334217816039231593  # Role that can check other users' cards
 EMBED_COLOR = discord.Color(int("FFFFFF", 16))
-CARD_FOLDER = "./cards"  # Make sure this matches your folder name for card images
+CARD_FOLDER = "./cards"  # Your cards folder path
 DB_FILE = "punches.sqlite"
 
 class MyBot(commands.Bot):
@@ -40,12 +40,13 @@ class MyBot(commands.Bot):
     def add_punch(self, user_id):
         punches = self.get_punches(user_id)
         punches += 1
+        if punches > 8:
+            punches = 8  # max 8 punches
         self.c.execute("INSERT OR REPLACE INTO punches (user_id, count) VALUES (?, ?)", (str(user_id), punches))
         self.conn.commit()
         return punches
 
     async def setup_hook(self):
-        # Sync global commands
         await self.tree.sync()
         self.loop.create_task(self.ensure_sticky_message())
 
@@ -63,7 +64,7 @@ class MyBot(commands.Bot):
             color=EMBED_COLOR,
             description=(
                 "<:00000004whitepaw_cxa:1372680035710009454> <:000_hrt:1371303750937083904> How To Vouch <:000_hrt:1371303750937083904> <:00000004whitepaw_cxa:1372680035710009454>\n\n"
-                f"Vouch <@{USER_ID_SILLYWUH}> {{what you bought}} and any comments u might have about ur service\n\n"
+                f"Vouch <@{SPECIAL_ROLE_ID}> {{what you bought}} and any comments u might have about ur service\n\n"
                 "<:00000004whitepaw_cxa:1372680035710009454> <a:white_stars:1372469592764715060> Thank You for your patience <a:white_stars:1372469592764715060> <:00000004whitepaw_cxa:1372680035710009454>\n"
                 "<a:Z_arrow_white:1372469533817966643>                 Please purchase soon again"
             )
@@ -125,17 +126,17 @@ async def pay(interaction: discord.Interaction):
     )
     await interaction.response.send_message(embed=embed, ephemeral=False)
 
+@app_commands.describe(user="User to show card for (only special role can use this)")
 @bot.tree.command(name="card", description="Show your loyalty card")
-async def card(interaction: discord.Interaction):
-    punches = bot.get_punches(interaction.user.id)
-    punches = max(0, min(punches, 6))  # 0 to 6 punches
+async def card(interaction: discord.Interaction, user: discord.User = None):
+    # If user is None, show for the interaction user
+    user = user or interaction.user
 
-    if punches == 0:
-        image_path = os.path.join(CARD_FOLDER, "card_0.png")
-        filename = "card_0.png"
-    else:
-        image_path = os.path.join(CARD_FOLDER, f"card_{punches}.webp")
-        filename = f"card_{punches}.webp"
+    punches = bot.get_punches(user.id)
+    punches = max(1, min(punches, 8))  # from 1 to 8 punches
+
+    image_path = os.path.join(CARD_FOLDER, f"card_{punches}.webp")
+    filename = f"card_{punches}.webp"
 
     if not os.path.exists(image_path):
         await interaction.response.send_message("Card image not found.", ephemeral=True)
@@ -143,13 +144,40 @@ async def card(interaction: discord.Interaction):
 
     file = discord.File(image_path, filename=filename)
     embed = discord.Embed(
-        title=f"{interaction.user.name}'s Loyalty Card",
-        description=f"Punches: {punches}/6",
+        title=f"{user.name}'s Loyalty Card",
+        description=f"Punches: {punches}/8",
         color=EMBED_COLOR
     )
     embed.set_image(url=f"attachment://{filename}")
     await interaction.response.send_message(embed=embed, file=file, ephemeral=True)
 
+    punches = bot.get_punches(user.id)
+    punches = max(1, min(punches, 8))  # 1 to 8 punches
+
+    image_index = punches - 1
+
+    if image_index == 0:  # punch 1
+        image_path = os.path.join(CARD_FOLDER, "card_0.png")
+        filename = "card_0.png"
+    elif image_index == 5:  # punch 6
+        image_path = os.path.join(CARD_FOLDER, "card_5.png")
+        filename = "card_5.png"
+    else:
+        image_path = os.path.join(CARD_FOLDER, f"card_{image_index}.webp")
+        filename = f"card_{image_index}.webp"
+
+    if not os.path.exists(image_path):
+        await interaction.response.send_message("Card image not found.", ephemeral=True)
+        return
+
+    file = discord.File(image_path, filename=filename)
+    embed = discord.Embed(
+        title=f"{user.name}'s Loyalty Card",
+        description=f"Punches: {punches}/8",
+        color=EMBED_COLOR
+    )
+    embed.set_image(url=f"attachment://{filename}")
+    await interaction.response.send_message(embed=embed, file=file, ephemeral=True)
 
 @bot.tree.command(name="punch", description="Add a punch to a user")
 @app_commands.describe(member="User to punch")
@@ -159,7 +187,7 @@ async def punch(interaction: discord.Interaction, member: discord.Member):
         return
 
     punches = bot.add_punch(member.id)
-    await interaction.response.send_message(f"Gave a punch to {member.mention}. They now have {punches}/6 punches.")
+    await interaction.response.send_message(f"<:ppawl:1372679923738607727> Gave a punch to {member.mention}. They now have {punches}/8 punches! <a:0kawaiiSparkles:1371321399955689523>")
 
 async def handle(request):
     return web.Response(text="Bot is running")
