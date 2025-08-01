@@ -186,6 +186,71 @@ async def reset(interaction: discord.Interaction, member: discord.Member):
 
     await interaction.response.send_message(f"Reset punches for {member.mention}.", ephemeral=True)
 
+from discord import ui, Interaction, SelectOption
+from discord.ext import commands
+
+class QueueStatusView(ui.View):
+    def __init__(self, original_embed, message):
+        super().__init__(timeout=None)
+        self.original_embed = original_embed
+        self.message = message
+
+        # Dropdown setup
+        self.add_item(QueueStatusDropdown(self.original_embed, self.message))
+
+class QueueStatusDropdown(ui.Select):
+    def __init__(self, embed, message):
+        self.embed = embed
+        self.message = message
+        options = [
+            SelectOption(label="𓏲 ๋࣭ need uploading", value="Need uploading"),
+            SelectOption(label="𓏲 ๋࣭ done", value="Done"),
+        ]
+        super().__init__(placeholder="Update ticket status", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: Interaction):
+        # Permission check
+        member = interaction.guild.get_member(interaction.user.id)
+        if not member or SPECIAL_ROLE_ID not in [role.id for role in member.roles]:
+            await interaction.response.send_message("You can’t change the queue status.", ephemeral=True)
+            return
+
+        # Update embed
+        new_status = f"**{self.values[0]}**"
+        lines = self.embed.description.splitlines()
+        for i, line in enumerate(lines):
+            if line.startswith("<:000bow:1371303813536940084> Ticket status :"):
+                lines[i] = f"<:000bow:1371303813536940084> Ticket status : {new_status}"
+                break
+        self.embed.description = "\n".join(lines)
+
+        await self.message.edit(embed=self.embed, view=self.view)
+        await interaction.response.send_message(f"Status updated to {new_status}", ephemeral=True)
+
+@bot.tree.command(name="q", description="Add an order to the queue")
+@app_commands.describe(product_bought="What did they buy?", payment="How did they pay?")
+async def queue(interaction: discord.Interaction, product_bought: str, payment: str):
+    member = interaction.guild.get_member(interaction.user.id)
+    if not member or SPECIAL_ROLE_ID not in [role.id for role in member.roles]:
+        await interaction.response.send_message("You don’t have permission to use this command.", ephemeral=True)
+        return
+
+    embed = discord.Embed(
+        title="queue status",
+        description=(
+            f"<:000bow:1371303813536940084> Customer : {interaction.user.mention}\n"
+            f"<:000bow:1371303813536940084> Ticket : {interaction.channel.mention}\n"
+            f"<:000bow:1371303813536940084> Product bought : **{product_bought}**\n"
+            f"<:000bow:1371303813536940084> Payment : **{payment}**\n"
+            f"<:000bow:1371303813536940084> Ticket status : **Pending**"
+        ),
+        color=EMBED_COLOR
+    )
+    msg = await interaction.channel.send(embed=embed)
+    view = QueueStatusView(embed, msg)
+    await msg.edit(view=view)
+    await interaction.response.send_message("Queue added.", ephemeral=True)
+
 async def handle(request):
     return web.Response(text="Bot is running")
 
