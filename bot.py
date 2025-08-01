@@ -232,6 +232,9 @@ class QueueStatusDropdown(ui.Select):
 @app_commands.describe(product_bought="What did they buy?", payment="How did they pay?")
 async def queue(interaction: discord.Interaction, product_bought: str, payment: str):
     member = interaction.guild.get_member(interaction.user.id)
+    if member is None:
+        member = await interaction.guild.fetch_member(interaction.user.id)
+
     if not member or SPECIAL_ROLE_ID not in [role.id for role in member.roles]:
         await interaction.response.send_message("You don’t have permission to use this command.", ephemeral=True)
         return
