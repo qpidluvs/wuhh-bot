@@ -1,6 +1,6 @@
 from aiohttp import web
 import discord
-from discord import app_commands, ui, Interaction, SelectOption 
+from discord import app_commands, ui, Interaction, SelectOption, Embed
 from discord.ext import commands
 import asyncio
 import sqlite3
@@ -11,7 +11,7 @@ STICKY_CHANNEL_ID = 1349182117040488502
 SPECIAL_ROLE_ID = 1334217816039231593
 ROLE_ID = 1336063813123965020
 EMBED_COLOR = discord.Color(int("FFFFFF", 16))
-CARD_FOLDER = "./cards"  # Your cards folder path
+CARD_FOLDER = "./cards"
 DB_FILE = "punches.sqlite"
 
 class MyBot(commands.Bot):
@@ -21,7 +21,6 @@ class MyBot(commands.Bot):
         intents.members = True
         super().__init__(command_prefix="!", intents=intents)
 
-        # Setup SQLite
         self.conn = sqlite3.connect(DB_FILE)
         self.c = self.conn.cursor()
         self.c.execute('''
@@ -42,19 +41,19 @@ class MyBot(commands.Bot):
 
     def add_punch(self, user_id):
         punches = self.get_punches(user_id)
-        punches += 1
-        if punches > 8:
-            punches = 8  # max 8 punches
+        punches = min(punches + 1, 8)
         self.c.execute("INSERT OR REPLACE INTO punches (user_id, count) VALUES (?, ?)", (str(user_id), punches))
         self.conn.commit()
         return punches
 
     async def setup_hook(self):
         await self.tree.sync()
-        self.loop.create_task(self.ensure_sticky_message())
 
     async def on_ready(self):
         print(f"Logged in as {self.user} ({self.user.id})")
+
+        # Sticky message logic
+        self.loop.create_task(self.ensure_sticky_message())
 
     async def ensure_sticky_message(self):
         await self.wait_until_ready()
@@ -93,7 +92,6 @@ class MyBot(commands.Bot):
         while not self.is_closed():
             await asyncio.sleep(5)
             messages = [m async for m in channel.history(limit=10)]
-
             for msg in messages:
                 if msg.author == self.user and msg.id != self.sticky_message_id:
                     try:
@@ -116,6 +114,8 @@ class MyBot(commands.Bot):
 
 bot = MyBot()
 
+# === Slash Commands ===
+
 @bot.tree.command(name="pay", description="Shows payment information")
 async def pay(interaction: discord.Interaction):
     embed = discord.Embed(color=EMBED_COLOR)
@@ -127,13 +127,12 @@ async def pay(interaction: discord.Interaction):
         "<:000_dotwhite:1371303745710723173> Make sure to send the correct amount\n"
         "<:000_dotwhite:1371303745710723173> Provide proof of payment once done <a:6D_princess:1371321502917722223>"
     )
-    await interaction.response.send_message(embed=embed, ephemeral=False)
+    await interaction.response.send_message(embed=embed)
 
-@app_commands.describe(user="User to show card for (only owner can use this)")
 @bot.tree.command(name="card", description="Show your loyalty card")
+@app_commands.describe(user="User to show card for (only owner can use this)")
 async def card(interaction: discord.Interaction, user: discord.User = None):
     user = user or interaction.user
-
     if user != interaction.user:
         member = interaction.guild.get_member(interaction.user.id)
         if member is None or SPECIAL_ROLE_ID not in [role.id for role in member.roles]:
@@ -141,28 +140,23 @@ async def card(interaction: discord.Interaction, user: discord.User = None):
             return
 
     punches = bot.get_punches(user.id)
-    punches = max(0, min(punches, 8))  # Clamp punches between 0 and 8
-
     if punches == 0:
         await interaction.response.send_message(f"{user.name} has no punches yet.", ephemeral=True)
         return
 
     image_path = os.path.join(CARD_FOLDER, f"card_{punches}.webp")
-    filename = f"card_{punches}.webp"
-
     if not os.path.exists(image_path):
         await interaction.response.send_message("Card image not found.", ephemeral=True)
         return
 
-    file = discord.File(image_path, filename=filename)
+    file = discord.File(image_path, filename=f"card_{punches}.webp")
     embed = discord.Embed(
         title=f"{user.name}'s Loyalty Card <:00000004whitepaw_cxa:1372680035710009454>",
         description=f"Punches: {punches}/8",
         color=EMBED_COLOR
     )
-    embed.set_image(url=f"attachment://{filename}")
-
-    await interaction.response.send_message(embed=embed, file=file, ephemeral=False)
+    embed.set_image(url=f"attachment://card_{punches}.webp")
+    await interaction.response.send_message(embed=embed, file=file)
 
 @bot.tree.command(name="punch", description="Add a punch to a user")
 @app_commands.describe(member="User to punch")
@@ -172,22 +166,23 @@ async def punch(interaction: discord.Interaction, member: discord.Member):
         return
 
     punches = bot.add_punch(member.id)
-    await interaction.response.send_message(f"<:ppawl:1372679923738607727> Gave a punch to {member.mention}. They now have {punches}/8 punches! <a:0kawaiiSparkles:1371321399955689523>")
+    await interaction.response.send_message(
+        f"<:ppawl:1372679923738607727> Gave a punch to {member.mention}. They now have {punches}/8 punches! <a:0kawaiiSparkles:1371321399955689523>"
+    )
 
 @bot.tree.command(name="reset", description="Reset a user's loyalty card punches")
 @app_commands.describe(member="User whose punches to reset")
 async def reset(interaction: discord.Interaction, member: discord.Member):
-    # Check if the user has the special role
     guild_member = interaction.guild.get_member(interaction.user.id)
     if guild_member is None or SPECIAL_ROLE_ID not in [role.id for role in guild_member.roles]:
-        await interaction.response.send_message("You don't have permission to use this command.", ephemeral=True)
+        await interaction.response.send_message("You don't have permission.", ephemeral=True)
         return
 
-    # Reset punches to zero
     bot.c.execute("INSERT OR REPLACE INTO punches (user_id, count) VALUES (?, ?)", (str(member.id), 0))
     bot.conn.commit()
-
     await interaction.response.send_message(f"Reset punches for {member.mention}.", ephemeral=True)
+
+# === Queue Command System ===
 
 class StatusDropdown(ui.Select):
     def __init__(self):
@@ -236,20 +231,7 @@ class QueueCommand(commands.Cog):
 
         await interaction.response.send_message(embed=embed, view=StatusView())
 
-@bot.event
-async def on_ready():
-    print(f"Bot ready: {bot.user}")
-    try:
-        await bot.tree.sync(guild=discord.Object(id=GUILD_ID))  # or remove `.sync(...)` for global
-        print("Commands synced.")
-    except Exception as e:
-        print(f"Failed to sync: {e}")
-
-async def setup():
-    await bot.add_cog(QueueCommand(bot))
-
-bot.loop.create_task(setup())
-bot.run(TOKEN)
+# === Web Server & Bot Startup ===
 
 async def handle(request):
     return web.Response(text="Bot is running")
@@ -259,7 +241,7 @@ app = web.Application()
 app.add_routes([web.get('/', handle)])
 
 async def main():
-    await bot.add_cog(QueueCommand(bot))  # <-- Moved here!
+    await bot.add_cog(QueueCommand(bot))
 
     runner = web.AppRunner(app)
     await runner.setup()
