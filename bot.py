@@ -191,7 +191,6 @@ async def reset(interaction: discord.Interaction, member: discord.Member):
 class QueueStatusView(ui.View):
     def __init__(self, message: discord.Message):
         super().__init__(timeout=None)
-        self.original_embed = original_embed
         self.message = message
 
         # Dropdown setup
