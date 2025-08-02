@@ -144,7 +144,7 @@ class QueueCommand(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="queue", description="Post a queue ticket embed.")
+    @app_commands.command(name="queue", description="add an order to the queue")
     @app_commands.describe(customer="The customer this ticket is for", product="Product bought", payment="Payment method")
     async def queue(self, interaction: Interaction, customer: discord.User, product: str, payment: str):
         if not any(role.id == ROLE_ID for role in interaction.user.roles):
