@@ -209,10 +209,7 @@ class QueueStatusDropdown(ui.Select):
 
     async def callback(self, interaction: Interaction):
         # Try to get member from cache first
-        member = interaction.guild.get_member(interaction.user.id)
-        if member is None:
-            # Fetch member from API if not cached
-            member = await interaction.guild.fetch_member(interaction.user.id)
+        member = await interaction.guild.fetch_member(interaction.user.id)
 
         # Check if member has the special role
         has_role = any(role.id == SPECIAL_ROLE_ID for role in member.roles) if member else False
