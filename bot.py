@@ -188,15 +188,7 @@ async def reset(interaction: discord.Interaction, member: discord.Member):
 
     await interaction.response.send_message(f"Reset punches for {member.mention}.", ephemeral=True)
 
-class QueueStatusView(ui.View):
-    def __init__(self, message: discord.Message):
-        super().__init__(timeout=None)
-        self.message = message
-
-        # Dropdown setup
-        self.add_item(QueueStatusDropdown(self.message))
-
-class QueueStatusDropdown(discord.ui.Select):
+class QueueStatusDropdown(ui.Select):
     def __init__(self, message: discord.Message):
         options = [
             discord.SelectOption(label="𓏲 ๋࣭ need uploading", value="Need uploading"),
@@ -226,6 +218,11 @@ class QueueStatusDropdown(discord.ui.Select):
         embed.description = "\n".join(lines)
         await self.message.edit(embed=embed)
         await interaction.response.send_message(f"Status updated to {new_status}", ephemeral=True)
+
+class QueueStatusView(ui.View):
+    def __init__(self, message: discord.Message):
+        super().__init__(timeout=None)
+        self.add_item(QueueStatusDropdown(message))
 
 @bot.tree.command(name="q", description="Add an order to the queue")
 @app_commands.describe(product_bought="What did they buy?", payment="How did they pay?")
