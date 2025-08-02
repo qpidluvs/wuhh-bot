@@ -1,6 +1,6 @@
 from aiohttp import web
 import discord
-from discord import app_commands
+from discord import app_commands, ui, Interaction, SelectOption 
 from discord.ext import commands
 import asyncio
 import sqlite3
@@ -188,9 +188,6 @@ async def reset(interaction: discord.Interaction, member: discord.Member):
 
     await interaction.response.send_message(f"Reset punches for {member.mention}.", ephemeral=True)
 
-from discord import ui, Interaction, SelectOption
-from discord.ext import commands
-
 class QueueStatusView(ui.View):
     def __init__(self, original_embed, message):
         super().__init__(timeout=None)
@@ -211,13 +208,20 @@ class QueueStatusDropdown(ui.Select):
         super().__init__(placeholder="Update ticket status", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: Interaction):
-        # Permission check
+        # Try to get member from cache first
         member = interaction.guild.get_member(interaction.user.id)
-        if not member or SPECIAL_ROLE_ID not in [role.id for role in member.roles]:
+        if member is None:
+            # Fetch member from API if not cached
+            member = await interaction.guild.fetch_member(interaction.user.id)
+
+        # Check if member has the special role
+        has_role = any(role.id == SPECIAL_ROLE_ID for role in member.roles) if member else False
+
+        if not has_role:
             await interaction.response.send_message("You can’t change the queue status.", ephemeral=True)
             return
 
-        # Update embed
+        # Update the embed status line
         new_status = f"**{self.values[0]}**"
         lines = self.embed.description.splitlines()
         for i, line in enumerate(lines):
@@ -226,6 +230,7 @@ class QueueStatusDropdown(ui.Select):
                 break
         self.embed.description = "\n".join(lines)
 
+        # Edit the original message to update the embed and keep the dropdown active
         await self.message.edit(embed=self.embed, view=self.view)
         await interaction.response.send_message(f"Status updated to {new_status}", ephemeral=True)
 
