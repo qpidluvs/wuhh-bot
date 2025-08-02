@@ -19,7 +19,7 @@ class MyBot(commands.Bot):
         intents = discord.Intents.default()
         intents.message_content = True
         intents.members = True
-        super().__init__(command_prefix="/", intents=intents)
+        super().__init__(command_prefix="!", intents=intents)
 
         # Setup SQLite
         self.conn = sqlite3.connect(DB_FILE)
@@ -259,6 +259,8 @@ app = web.Application()
 app.add_routes([web.get('/', handle)])
 
 async def main():
+    await bot.add_cog(QueueCommand(bot))  # <-- Moved here!
+
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, '0.0.0.0', port)
