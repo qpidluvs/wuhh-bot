@@ -195,8 +195,10 @@ class QueueStatusDropdown(ui.Select):
         self.message = message
 
     async def callback(self, interaction: discord.Interaction):
-        member = await interaction.guild.fetch_member(interaction.user.id)
-        if SPECIAL_ROLE_ID not in [role.id for role in member.roles]:
+        # Use cached member object
+        member = interaction.user if isinstance(interaction.user, discord.Member) else interaction.guild.get_member(interaction.user.id)
+        
+        if member is None or SPECIAL_ROLE_ID not in [role.id for role in member.roles]:
             await interaction.response.send_message("You can’t change the queue status.", ephemeral=True)
             return
 
@@ -213,7 +215,6 @@ class QueueStatusDropdown(ui.Select):
         embed.description = "\n".join(lines)
         await self.message.edit(embed=embed)
         await interaction.response.send_message(f"Status updated to {new_status}", ephemeral=True)
-
 class QueueStatusView(ui.View):
     def __init__(self, message: discord.Message):
         super().__init__(timeout=None)
