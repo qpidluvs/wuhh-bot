@@ -232,14 +232,6 @@ class QueueStatusDropdown(ui.Select):
 @bot.tree.command(name="q", description="Add an order to the queue")
 @app_commands.describe(product_bought="What did they buy?", payment="How did they pay?")
 async def queue(interaction: discord.Interaction, product_bought: str, payment: str):
-    member = interaction.guild.get_member(interaction.user.id)
-    if member is None:
-        member = await interaction.guild.fetch_member(interaction.user.id)
-
-    if not member or SPECIAL_ROLE_ID not in [role.id for role in member.roles]:
-        await interaction.response.send_message("You don’t have permission to use this command.", ephemeral=True)
-        return
-
     queue_channel = bot.get_channel(QUEUE_CHANNEL_ID)
     if queue_channel is None:
         await interaction.response.send_message("Queue channel not found.", ephemeral=True)
@@ -259,7 +251,7 @@ async def queue(interaction: discord.Interaction, product_bought: str, payment: 
     msg = await queue_channel.send(embed=embed)
     view = QueueStatusView(embed, msg)
     await msg.edit(view=view)
-    await interaction.response.send_message(f"Queue added in {queue_channel.mention}.", ephemeral=True)
+    await interaction.response.send_message(f"Queue added in {queue_channel.mention}.", ephemeral=False)
 
 async def handle(request):
     return web.Response(text="Bot is running")
