@@ -198,7 +198,7 @@ class QueueStatusDropdown(ui.Select):
         # Use cached member object
         member = interaction.user if isinstance(interaction.user, discord.Member) else interaction.guild.get_member(interaction.user.id)
         
-        if member is None or SPECIAL_ROLE_ID not in [role.id for role in member.roles]:
+        if member is None or ROLE_ID not in [role.id for role in member.roles]:
             await interaction.response.send_message("You can’t change the queue status.", ephemeral=True)
             return
 
