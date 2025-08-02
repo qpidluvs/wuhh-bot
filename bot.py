@@ -8,8 +8,8 @@ import os
 
 QUEUE_CHANNEL_ID = 1400893779648577536
 STICKY_CHANNEL_ID = 1349182117040488502
-SPECIAL_ROLE_ID = 1334217816039231593
-ROLE_ID = 1336063813123965020
+SPECIAL_ROLE_ID = 1334217816039231593  # Role that can check others' cards & update queue status
+ROLE_ID = 1336063813123965020  # Role allowed to update ticket status (same or different)
 EMBED_COLOR = discord.Color(int("FFFFFF", 16))
 CARD_FOLDER = "./cards"
 DB_FILE = "punches.sqlite"
@@ -19,7 +19,7 @@ class MyBot(commands.Bot):
         intents = discord.Intents.default()
         intents.message_content = True
         intents.members = True
-        super().__init__(command_prefix="!", intents=intents)
+        super().__init__(command_prefix="/", intents=intents)
 
         self.conn = sqlite3.connect(DB_FILE)
         self.c = self.conn.cursor()
@@ -115,52 +115,137 @@ class MyBot(commands.Bot):
 
 bot = MyBot()
 
-class StatusDropdown(ui.Select):
-    def __init__(self):
+@bot.tree.command(name="pay", description="Shows payment information")
+async def pay(interaction: discord.Interaction):
+    embed = discord.Embed(color=EMBED_COLOR)
+    embed.description = (
+        "**<:00000004whitepaw_cxa:1372680035710009454> Payment**\n\n"
+        "<:DNS_Paypal_wuhh:1399149498089078854> **Paypal:** https://www.paypal.me/Sillywuh\n"
+        "<:white_arrow112:1372679871494619136> __You must pay with fnf__\n\n"
+        "<:DNS_Cashapp_wuhh:1399149573045485779> **Cashapp:** https://cash.app/$Sillywuh\n\n"
+        "<:000_dotwhite:1371303745710723173> Make sure to send the correct amount\n"
+        "<:000_dotwhite:1371303745710723173> Provide proof of payment once done <a:6D_princess:1371321502917722223>"
+    )
+    await interaction.response.send_message(embed=embed, ephemeral=False)
+
+@app_commands.describe(user="User to show card for (only owner can use this)")
+@bot.tree.command(name="card", description="Show your loyalty card")
+async def card(interaction: discord.Interaction, user: discord.User = None):
+    user = user or interaction.user
+
+    if user != interaction.user:
+        member = interaction.guild.get_member(interaction.user.id)
+        if member is None or SPECIAL_ROLE_ID not in [role.id for role in member.roles]:
+            await interaction.response.send_message("You don't have permission to check others' cards.", ephemeral=True)
+            return
+
+    punches = bot.get_punches(user.id)
+    punches = max(0, min(punches, 8))
+
+    if punches == 0:
+        await interaction.response.send_message(f"{user.name} has no punches yet.", ephemeral=True)
+        return
+
+    image_path = os.path.join(CARD_FOLDER, f"card_{punches}.webp")
+    filename = f"card_{punches}.webp"
+
+    if not os.path.exists(image_path):
+        await interaction.response.send_message("Card image not found.", ephemeral=True)
+        return
+
+    file = discord.File(image_path, filename=filename)
+    embed = discord.Embed(
+        title=f"{user.name}'s Loyalty Card <:00000004whitepaw_cxa:1372680035710009454>",
+        description=f"Punches: {punches}/8",
+        color=EMBED_COLOR
+    )
+    embed.set_image(url=f"attachment://{filename}")
+
+    await interaction.response.send_message(embed=embed, file=file, ephemeral=False)
+
+@bot.tree.command(name="punch", description="Add a punch to a user")
+@app_commands.describe(member="User to punch")
+async def punch(interaction: discord.Interaction, member: discord.Member):
+    if not interaction.user.guild_permissions.manage_guild:
+        await interaction.response.send_message("You don’t have permission.", ephemeral=True)
+        return
+
+    punches = bot.add_punch(member.id)
+    await interaction.response.send_message(f"<:ppawl:1372679923738607727> Gave a punch to {member.mention}. They now have {punches}/8 punches! <a:0kawaiiSparkles:1371321399955689523>")
+
+@bot.tree.command(name="reset", description="Reset a user's loyalty card punches")
+@app_commands.describe(member="User whose punches to reset")
+async def reset(interaction: discord.Interaction, member: discord.Member):
+    guild_member = interaction.guild.get_member(interaction.user.id)
+    if guild_member is None or SPECIAL_ROLE_ID not in [role.id for role in guild_member.roles]:
+        await interaction.response.send_message("You don't have permission to use this command.", ephemeral=True)
+        return
+
+    bot.c.execute("INSERT OR REPLACE INTO punches (user_id, count) VALUES (?, ?)", (str(member.id), 0))
+    bot.conn.commit()
+    await interaction.response.send_message(f"Reset punches for {member.mention}.", ephemeral=True)
+
+class QueueStatusDropdown(ui.Select):
+    def __init__(self, message: discord.Message):
         options = [
-            SelectOption(label="𒌲 ๋๋อะรรร need uploading", value="**Need uploading**"),
-            SelectOption(label="𒌲 ๋๋อะรรร done", value="**Done**")
+            SelectOption(label="𓏲 ๋࣭ need uploading", value="Need uploading"),
+            SelectOption(label="𓏲 ๋࣭ done", value="Done"),
         ]
-        super().__init__(placeholder="Update ticket status...", options=options)
+        super().__init__(placeholder="Update ticket status", min_values=1, max_values=1, options=options)
+        self.message = message
 
-    async def callback(self, interaction: Interaction):
-        if not any(role.id == ROLE_ID for role in interaction.user.roles):
-            await interaction.response.send_message("You don't have permission to update the status.", ephemeral=True)
+    async def callback(self, interaction: discord.Interaction):
+        member = await interaction.guild.fetch_member(interaction.user.id)
+        if SPECIAL_ROLE_ID not in [role.id for role in member.roles]:
+            await interaction.response.send_message("You can’t change the queue status.", ephemeral=True)
             return
 
-        embed = interaction.message.embeds[0]
-        lines = embed.description.split("\n")
-        lines[-1] = f"<:000bow:1371303813536940084> Ticket status : {self.values[0]}"
+        selected = self.values[0]
+        new_status = f"**{selected}**"
+
+        embed = self.message.embeds[0]
+        lines = embed.description.splitlines()
+        for i, line in enumerate(lines):
+            if line.startswith("<:000bow:1371303813536940084> Ticket status :"):
+                lines[i] = f"<:000bow:1371303813536940084> Ticket status : {new_status}"
+                break
+
         embed.description = "\n".join(lines)
+        await self.message.edit(embed=embed)
+        await interaction.response.send_message(f"Status updated to {new_status}", ephemeral=True)
 
-        await interaction.response.edit_message(embed=embed, view=self.view)
-
-class StatusView(ui.View):
-    def __init__(self):
+class QueueStatusView(ui.View):
+    def __init__(self, message: discord.Message):
         super().__init__(timeout=None)
-        self.add_item(StatusDropdown())
+        self.add_item(QueueStatusDropdown(message))
 
-class QueueCommand(commands.Cog):
-    def __init__(self, bot):
-        self.bot = bot
+@bot.tree.command(name="queue", description="Add an order to the queue")
+@app_commands.describe(customer="The customer this ticket is for", product="Product bought", payment="Payment method")
+async def queue(interaction: discord.Interaction, customer: discord.User, product: str, payment: str):
+    if not any(role.id == ROLE_ID for role in interaction.user.roles):
+        await interaction.response.send_message("You can't use this command.", ephemeral=True)
+        return
 
-    @app_commands.command(name="queue", description="add an order to the queue")
-    @app_commands.describe(customer="The customer this ticket is for", product="Product bought", payment="Payment method")
-    async def queue(self, interaction: Interaction, customer: discord.User, product: str, payment: str):
-        if not any(role.id == ROLE_ID for role in interaction.user.roles):
-            await interaction.response.send_message("You can't use this command.", ephemeral=True)
-            return
+    queue_channel = bot.get_channel(QUEUE_CHANNEL_ID)
+    if queue_channel is None:
+        await interaction.response.send_message("Queue channel not found.", ephemeral=True)
+        return
 
-        embed = discord.Embed(title="queue status", color=EMBED_COLOR)
-        embed.description = (
+    embed = discord.Embed(
+        title="queue status",
+        description=(
             f"<:000bow:1371303813536940084> Customer : {customer.mention}\n"
             f"<:000bow:1371303813536940084> Ticket : {interaction.channel.mention}\n"
             f"<:000bow:1371303813536940084> Product bought : **{product}**\n"
             f"<:000bow:1371303813536940084> Payment : **{payment}**\n"
             f"<:000bow:1371303813536940084> Ticket status : **Pending**"
-        )
-
-        await interaction.response.send_message(embed=embed, view=StatusView())
+        ),
+        color=EMBED_COLOR
+    )
+    msg = await queue_channel.send(embed=embed)
+    view = QueueStatusView(msg)
+    await msg.edit(view=view)
+    await interaction.response.send_message(f"Queue added in {queue_channel.mention}.", ephemeral=False)
 
 async def handle(request):
     return web.Response(text="Bot is running")
@@ -170,8 +255,6 @@ app = web.Application()
 app.add_routes([web.get('/', handle)])
 
 async def main():
-    await bot.add_cog(QueueCommand(bot))
-
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, '0.0.0.0', port)
