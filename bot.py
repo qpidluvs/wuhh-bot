@@ -189,46 +189,43 @@ async def reset(interaction: discord.Interaction, member: discord.Member):
     await interaction.response.send_message(f"Reset punches for {member.mention}.", ephemeral=True)
 
 class QueueStatusView(ui.View):
-    def __init__(self, original_embed, message):
+    def __init__(self, message: discord.Message):
         super().__init__(timeout=None)
         self.original_embed = original_embed
         self.message = message
 
         # Dropdown setup
-        self.add_item(QueueStatusDropdown(self.original_embed, self.message))
+        self.add_item(QueueStatusDropdown(self.message))
 
-class QueueStatusDropdown(ui.Select):
-    def __init__(self, embed, message):
-        self.embed = embed
-        self.message = message
+class QueueStatusDropdown(discord.ui.Select):
+    def __init__(self, message: discord.Message):
         options = [
-            SelectOption(label="𓏲 ๋࣭ need uploading", value="Need uploading"),
-            SelectOption(label="𓏲 ๋࣭ done", value="Done"),
+            discord.SelectOption(label="𓏲 ๋࣭ need uploading", value="Need uploading"),
+            discord.SelectOption(label="𓏲 ๋࣭ done", value="Done"),
         ]
         super().__init__(placeholder="Update ticket status", min_values=1, max_values=1, options=options)
+        self.message = message
 
-    async def callback(self, interaction: Interaction):
-        # Try to get member from cache first
+    async def callback(self, interaction: discord.Interaction):
         member = await interaction.guild.fetch_member(interaction.user.id)
-
-        # Check if member has the special role
-        has_role = any(role.id == SPECIAL_ROLE_ID for role in member.roles) if member else False
+        has_role = any(role.id == SPECIAL_ROLE_ID for role in member.roles)
 
         if not has_role:
             await interaction.response.send_message("You can’t change the queue status.", ephemeral=True)
             return
 
-        # Update the embed status line
-        new_status = f"**{self.values[0]}**"
-        lines = self.embed.description.splitlines()
+        selected = self.values[0]
+        new_status = f"**{selected}**"
+
+        embed = self.message.embeds[0]
+        lines = embed.description.splitlines()
         for i, line in enumerate(lines):
             if line.startswith("<:000bow:1371303813536940084> Ticket status :"):
                 lines[i] = f"<:000bow:1371303813536940084> Ticket status : {new_status}"
                 break
-        self.embed.description = "\n".join(lines)
 
-        # Edit the original message to update the embed and keep the dropdown active
-        await self.message.edit(embed=self.embed, view=self.view)
+        embed.description = "\n".join(lines)
+        await self.message.edit(embed=embed)
         await interaction.response.send_message(f"Status updated to {new_status}", ephemeral=True)
 
 @bot.tree.command(name="q", description="Add an order to the queue")
@@ -251,7 +248,7 @@ async def queue(interaction: discord.Interaction, product_bought: str, payment: 
         color=EMBED_COLOR
     )
     msg = await queue_channel.send(embed=embed)
-    view = QueueStatusView(embed, msg)
+    view = QueueStatusView(msg)
     await msg.edit(view=view)
     await interaction.response.send_message(f"Queue added in {queue_channel.mention}.", ephemeral=False)
 
